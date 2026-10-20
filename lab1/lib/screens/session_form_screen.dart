@@ -27,11 +27,16 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
   late final TextEditingController _descriptionController;
   late final TextEditingController _dateController;
   late final TextEditingController _timeController;
+  late final Object _openingValues;
 
   late ExchangeLanguage _language;
   late bool _online;
   late DateTime _date;
   late TimeOfDay _time;
+
+  bool _saving = false;
+  bool _allowPop = false;
+  bool _askingDiscard = false;
 
   bool get _editing => widget.session != null;
 
@@ -42,6 +47,26 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
         _time.hour,
         _time.minute,
       );
+
+  // Records compare their field values, including edits that were reverted.
+  Object get _values => (
+        _titleController.text,
+        _placeController.text,
+        _limitController.text,
+        _descriptionController.text,
+        _language,
+        _online,
+        _when,
+      );
+
+  bool get _dirty => !_allowPop && _values != _openingValues;
+
+  List<TextEditingController> get _editableControllers => [
+        _titleController,
+        _placeController,
+        _limitController,
+        _descriptionController,
+      ];
 
   @override
   void initState() {
@@ -60,6 +85,14 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
     _date = DateUtils.dateOnly(_initial.when);
     _time = TimeOfDay.fromDateTime(_initial.when);
     _syncDateText();
+    _openingValues = _values;
+    for (final controller in _editableControllers) {
+      controller.addListener(_refreshDirty);
+    }
+  }
+
+  void _refreshDirty() {
+    setState(() {});
   }
 
   void _syncDateText() {
@@ -72,11 +105,11 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
 
   @override
   void dispose() {
+    for (final controller in _editableControllers) {
+      controller.removeListener(_refreshDirty);
+    }
     for (final controller in [
-      _titleController,
-      _placeController,
-      _limitController,
-      _descriptionController,
+      ..._editableControllers,
       _dateController,
       _timeController,
     ]) {
@@ -151,8 +184,8 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
     }
     setState(() {
       _date = selected;
-      _syncDateText();
     });
+    _syncDateText();
   }
 
   Future<void> _pickTime() async {
@@ -166,11 +199,57 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
     }
     setState(() {
       _time = selected;
-      _syncDateText();
     });
+    _syncDateText();
   }
 
-  void _save() {
+  Future<void> _finish(ExchangeSession? result) async {
+    setState(() {
+      _allowPop = true;
+    });
+    // Rebuild PopScope before popping; Save must not ask about discarding.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) {
+      return;
+    }
+    Navigator.pop(context, result);
+  }
+
+  Future<void> _requestDiscard() async {
+    if (_askingDiscard || _saving || !_dirty) {
+      return;
+    }
+    _askingDiscard = true;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('Your unsaved changes will be lost.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    _askingDiscard = false;
+    if (discard == true) {
+      await _finish(null);
+    }
+  }
+
+  Future<void> _save() async {
+    if (_saving) {
+      return;
+    }
     final form = _formKey.currentState;
     if (form == null || !form.validate()) {
       return;
@@ -191,134 +270,162 @@ class _SessionFormScreenState extends State<SessionFormScreen> {
       description: description,
       clearDescription: description.isEmpty,
     );
-    Navigator.pop(context, result);
+
+    setState(() {
+      _saving = true;
+    });
+    await Future<void>.delayed(const Duration(seconds: 1));
+    if (!mounted) {
+      return;
+    }
+    await _finish(result);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_editing ? 'Edit session' : 'New session'),
-      ),
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              TextFormField(
-                controller: _titleController,
-                focusNode: _titleFocus,
-                maxLength: 60,
-                textCapitalization: TextCapitalization.sentences,
-                textInputAction: TextInputAction.next,
-                onFieldSubmitted: (_) => _placeFocus.requestFocus(),
-                onTapOutside: (_) => _dismissKeyboard(),
-                decoration: const InputDecoration(labelText: 'Title'),
-                validator: _validateTitle,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<ExchangeLanguage>(
-                initialValue: _language,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Language'),
-                items: [
-                  for (final language in ExchangeLanguage.values)
-                    DropdownMenuItem(
-                      value: language,
-                      child: Text(language.label),
+    return PopScope<ExchangeSession>(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          _requestDiscard();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_editing ? 'Edit session' : 'New session'),
+        ),
+        body: SafeArea(
+          child: Form(
+            key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: AbsorbPointer(
+              absorbing: _saving,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  TextFormField(
+                    controller: _titleController,
+                    focusNode: _titleFocus,
+                    maxLength: 60,
+                    textCapitalization: TextCapitalization.sentences,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _placeFocus.requestFocus(),
+                    onTapOutside: (_) => _dismissKeyboard(),
+                    decoration: const InputDecoration(labelText: 'Title'),
+                    validator: _validateTitle,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<ExchangeLanguage>(
+                    initialValue: _language,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Language'),
+                    items: [
+                      for (final language in ExchangeLanguage.values)
+                        DropdownMenuItem(
+                          value: language,
+                          child: Text(language.label),
+                        ),
+                    ],
+                    validator: (value) =>
+                        value == null ? 'Choose a language' : null,
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      setState(() {
+                        _language = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Online meeting'),
+                    value: _online,
+                    onChanged: (value) {
+                      setState(() {
+                        _online = value ?? false;
+                      });
+                    },
+                  ),
+                  TextFormField(
+                    controller: _placeController,
+                    focusNode: _placeFocus,
+                    keyboardType:
+                        _online ? TextInputType.url : TextInputType.text,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _limitFocus.requestFocus(),
+                    onTapOutside: (_) => _dismissKeyboard(),
+                    decoration: InputDecoration(
+                      labelText: _online ? 'Meeting link' : 'Meeting place',
                     ),
+                    validator: _validatePlace,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _limitController,
+                    focusNode: _limitFocus,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => _descriptionFocus.requestFocus(),
+                    onTapOutside: (_) => _dismissKeyboard(),
+                    decoration:
+                        const InputDecoration(labelText: 'Participant limit'),
+                    validator: _validateLimit,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _dateController,
+                    readOnly: true,
+                    onTap: _pickDate,
+                    decoration: const InputDecoration(
+                      labelText: 'Date',
+                      suffixIcon: Icon(Icons.calendar_today),
+                    ),
+                    validator: _validateSchedule,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _timeController,
+                    readOnly: true,
+                    onTap: _pickTime,
+                    decoration: const InputDecoration(
+                      labelText: 'Time',
+                      suffixIcon: Icon(Icons.schedule),
+                    ),
+                    validator: _validateSchedule,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _descriptionController,
+                    focusNode: _descriptionFocus,
+                    minLines: 2,
+                    maxLines: 4,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) => _dismissKeyboard(),
+                    onTapOutside: (_) => _dismissKeyboard(),
+                    decoration: const InputDecoration(
+                      labelText: 'Description (optional)',
+                    ),
+                    // Optional text has no additional restrictions.
+                    validator: (_) => null,
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    key: const ValueKey('save-session'),
+                    onPressed: _saving ? null : _save,
+                    child: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save'),
+                  ),
                 ],
-                validator: (value) =>
-                    value == null ? 'Choose a language' : null,
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  setState(() {
-                    _language = value;
-                  });
-                },
               ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Online meeting'),
-                value: _online,
-                onChanged: (value) {
-                  setState(() {
-                    _online = value ?? false;
-                  });
-                },
-              ),
-              TextFormField(
-                controller: _placeController,
-                focusNode: _placeFocus,
-                keyboardType: _online ? TextInputType.url : TextInputType.text,
-                textInputAction: TextInputAction.next,
-                onFieldSubmitted: (_) => _limitFocus.requestFocus(),
-                onTapOutside: (_) => _dismissKeyboard(),
-                decoration: InputDecoration(
-                  labelText: _online ? 'Meeting link' : 'Meeting place',
-                ),
-                validator: _validatePlace,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _limitController,
-                focusNode: _limitFocus,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.next,
-                onFieldSubmitted: (_) => _descriptionFocus.requestFocus(),
-                onTapOutside: (_) => _dismissKeyboard(),
-                decoration:
-                    const InputDecoration(labelText: 'Participant limit'),
-                validator: _validateLimit,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _dateController,
-                readOnly: true,
-                onTap: _pickDate,
-                decoration: const InputDecoration(
-                  labelText: 'Date',
-                  suffixIcon: Icon(Icons.calendar_today),
-                ),
-                validator: _validateSchedule,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _timeController,
-                readOnly: true,
-                onTap: _pickTime,
-                decoration: const InputDecoration(
-                  labelText: 'Time',
-                  suffixIcon: Icon(Icons.schedule),
-                ),
-                validator: _validateSchedule,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _descriptionController,
-                focusNode: _descriptionFocus,
-                minLines: 2,
-                maxLines: 4,
-                keyboardType: TextInputType.multiline,
-                textInputAction: TextInputAction.done,
-                onFieldSubmitted: (_) => _dismissKeyboard(),
-                onTapOutside: (_) => _dismissKeyboard(),
-                decoration: const InputDecoration(
-                  labelText: 'Description (optional)',
-                ),
-              ),
-              const SizedBox(height: 24),
-              FilledButton(
-                key: const ValueKey('save-session'),
-                onPressed: _save,
-                child: const Text('Save'),
-              ),
-            ],
+            ),
           ),
         ),
       ),
