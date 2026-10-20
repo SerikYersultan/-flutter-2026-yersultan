@@ -50,6 +50,16 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+  void _deleteSession(String id) {
+    final remaining = _sessions.where((session) => session.id != id).toList();
+    setState(() {
+      _sessions = remaining;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Session deleted')),
+    );
+  }
+
   void _toggleFavourite(ExchangeSession selected) {
     for (final session in _sessions) {
       if (session.id == selected.id) {
@@ -106,6 +116,7 @@ class _AppShellState extends State<AppShell> {
         profile: _profile,
         onChanged: _replaceSession,
         onRequestProfile: _requestProfile,
+        onDeleted: _deleteSession,
       ),
     );
   }

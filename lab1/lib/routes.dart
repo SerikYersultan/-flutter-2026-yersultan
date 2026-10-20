@@ -15,12 +15,14 @@ class DetailArguments {
     required this.profile,
     required this.onChanged,
     required this.onRequestProfile,
+    this.onDeleted,
   });
 
   final ExchangeSession session;
   final Profile profile;
   final ValueChanged<ExchangeSession> onChanged;
   final VoidCallback onRequestProfile;
+  final ValueChanged<String>? onDeleted;
 }
 
 class FormArguments {

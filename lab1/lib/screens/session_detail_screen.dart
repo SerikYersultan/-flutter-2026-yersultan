@@ -5,7 +5,7 @@ import '../routes.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/session_header.dart';
 
-enum _SessionAction { edit }
+enum _SessionAction { edit, delete }
 
 class SessionDetailScreen extends StatefulWidget {
   const SessionDetailScreen({
@@ -23,6 +23,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
   late ExchangeSession _session;
   bool _confirming = false;
   bool _editing = false;
+  bool _deleting = false;
 
   @override
   void initState() {
@@ -42,7 +43,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
   }
 
   Future<void> _editSession() async {
-    if (_editing) {
+    if (_editing || _deleting || _confirming) {
       return;
     }
     setState(() {
@@ -71,10 +72,58 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     );
   }
 
+  Future<void> _deleteSession() async {
+    final onDeleted = widget.arguments.onDeleted;
+    if (onDeleted == null || _deleting || _editing || _confirming) {
+      return;
+    }
+    setState(() {
+      _deleting = true;
+    });
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this session?'),
+        content: Text(
+          'Remove "${_session.title}" and its participant list? '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _deleting = false;
+    });
+    if (confirmed != true) {
+      return;
+    }
+
+    final id = _session.id;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    Navigator.pop(context);
+    onDeleted(id);
+  }
+
   void _selectAction(_SessionAction action) {
     switch (action) {
       case _SessionAction.edit:
         _editSession();
+      case _SessionAction.delete:
+        _deleteSession();
     }
   }
 
@@ -86,7 +135,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
   }
 
   Future<void> _participate() async {
-    if (_confirming) {
+    if (_confirming || _editing || _deleting) {
       return;
     }
 
@@ -232,6 +281,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     final name = widget.arguments.profile.name.trim();
     final isMember = name.isNotEmpty && _session.contains(name);
     final unavailable = !isMember && (_session.isFull || _session.isPast);
+    final busy = _confirming || _editing || _deleting;
     final actionLabel = isMember
         ? 'Leave'
         : _session.isPast
@@ -250,7 +300,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               tooltip: _session.favourite
                   ? 'Remove from favourites'
                   : 'Add to favourites',
-              onPressed: _toggleFavourite,
+              onPressed: busy ? null : _toggleFavourite,
               icon: Icon(
                 _session.favourite ? Icons.favorite : Icons.favorite_border,
               ),
@@ -258,12 +308,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
             PopupMenuButton<_SessionAction>(
               key: const ValueKey('session-menu'),
               tooltip: 'Session actions',
-              enabled: !_editing && !_confirming,
+              enabled: !busy,
               onSelected: _selectAction,
-              itemBuilder: (context) => const [
-                PopupMenuItem(
+              itemBuilder: (context) => [
+                const PopupMenuItem(
                   value: _SessionAction.edit,
                   child: Text('Edit'),
+                ),
+                PopupMenuItem(
+                  value: _SessionAction.delete,
+                  enabled: widget.arguments.onDeleted != null,
+                  child: const Text('Delete'),
                 ),
               ],
             ),
@@ -293,7 +348,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                   width: double.infinity,
                   child: FilledButton.icon(
                     key: const ValueKey('participation-action'),
-                    onPressed: _confirming || unavailable ? null : _participate,
+                    onPressed: busy || unavailable ? null : _participate,
                     icon: Icon(
                       isMember ? Icons.person_remove : Icons.person_add,
                     ),
