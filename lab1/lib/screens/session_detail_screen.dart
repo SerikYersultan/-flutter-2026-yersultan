@@ -5,6 +5,8 @@ import '../routes.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/session_header.dart';
 
+enum _SessionAction { edit }
+
 class SessionDetailScreen extends StatefulWidget {
   const SessionDetailScreen({
     super.key,
@@ -20,6 +22,7 @@ class SessionDetailScreen extends StatefulWidget {
 class _SessionDetailScreenState extends State<SessionDetailScreen> {
   late ExchangeSession _session;
   bool _confirming = false;
+  bool _editing = false;
 
   @override
   void initState() {
@@ -36,6 +39,43 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
   void _toggleFavourite() {
     _updateSession(_session.copyWith(favourite: !_session.favourite));
+  }
+
+  Future<void> _editSession() async {
+    if (_editing) {
+      return;
+    }
+    setState(() {
+      _editing = true;
+    });
+
+    final updated = await Navigator.pushNamed<ExchangeSession>(
+      context,
+      Routes.form,
+      arguments: FormArguments(session: _session),
+    );
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _editing = false;
+    });
+    if (updated == null) {
+      return;
+    }
+
+    _updateSession(updated);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Session updated')),
+    );
+  }
+
+  void _selectAction(_SessionAction action) {
+    switch (action) {
+      case _SessionAction.edit:
+        _editSession();
+    }
   }
 
   void _openProfile() {
@@ -214,6 +254,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               icon: Icon(
                 _session.favourite ? Icons.favorite : Icons.favorite_border,
               ),
+            ),
+            PopupMenuButton<_SessionAction>(
+              key: const ValueKey('session-menu'),
+              tooltip: 'Session actions',
+              enabled: !_editing && !_confirming,
+              onSelected: _selectAction,
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: _SessionAction.edit,
+                  child: Text('Edit'),
+                ),
+              ],
             ),
           ],
           bottom: TabBar(
