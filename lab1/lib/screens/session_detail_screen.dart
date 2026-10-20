@@ -19,6 +19,7 @@ class SessionDetailScreen extends StatefulWidget {
 
 class _SessionDetailScreenState extends State<SessionDetailScreen> {
   late ExchangeSession _session;
+  bool _confirming = false;
 
   @override
   void initState() {
@@ -26,12 +27,98 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     _session = widget.arguments.session;
   }
 
-  void _toggleFavourite() {
-    final updated = _session.copyWith(favourite: !_session.favourite);
+  void _updateSession(ExchangeSession updated) {
     widget.arguments.onChanged(updated);
     setState(() {
       _session = updated;
     });
+  }
+
+  void _toggleFavourite() {
+    _updateSession(_session.copyWith(favourite: !_session.favourite));
+  }
+
+  void _openProfile() {
+    final requestProfile = widget.arguments.onRequestProfile;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    Navigator.pop(context);
+    requestProfile();
+  }
+
+  Future<void> _participate() async {
+    if (_confirming) {
+      return;
+    }
+
+    final name = widget.arguments.profile.name.trim();
+
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Save your name in Profile before joining.'),
+          action: SnackBarAction(
+            label: 'Profile',
+            onPressed: _openProfile,
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (_session.contains(name)) {
+      final remaining = _session.participants
+          .where((participant) => participant != name)
+          .toList();
+      _updateSession(_session.copyWith(participants: remaining));
+      return;
+    }
+
+    if (_session.isFull || _session.isPast) {
+      return;
+    }
+
+    setState(() {
+      _confirming = true;
+    });
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Join this session?'),
+        content: Text('Add $name to "${_session.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Join'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _confirming = false;
+    });
+
+    if (confirmed != true ||
+        _session.isFull ||
+        _session.isPast ||
+        _session.contains(name)) {
+      return;
+    }
+
+    _updateSession(
+      _session.copyWith(
+        participants: [..._session.participants, name],
+      ),
+    );
   }
 
   Widget _buildAbout(BuildContext context) {
@@ -72,7 +159,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
       );
     }
 
-    final profileName = widget.arguments.profile.name;
+    final profileName = widget.arguments.profile.name.trim();
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
@@ -102,6 +189,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final name = widget.arguments.profile.name.trim();
+    final isMember = name.isNotEmpty && _session.contains(name);
+    final unavailable = !isMember && (_session.isFull || _session.isPast);
+    final actionLabel = isMember
+        ? 'Leave'
+        : _session.isPast
+            ? 'Session started'
+            : _session.isFull
+                ? 'Session full'
+                : 'Join';
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -125,10 +223,33 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
             ],
           ),
         ),
-        body: TabBarView(
+        body: Column(
           children: [
-            _buildAbout(context),
-            _buildParticipants(context),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _buildAbout(context),
+                  _buildParticipants(context),
+                ],
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    key: const ValueKey('participation-action'),
+                    onPressed: _confirming || unavailable ? null : _participate,
+                    icon: Icon(
+                      isMember ? Icons.person_remove : Icons.person_add,
+                    ),
+                    label: Text(actionLabel),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
