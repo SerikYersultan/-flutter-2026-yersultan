@@ -3,17 +3,12 @@ import 'package:flutter/material.dart';
 import '../data/seed_sessions.dart';
 import '../models/exchange_session.dart';
 import '../models/profile.dart';
+import '../tabs/profile_tab.dart';
 import '../tabs/sessions_tab.dart';
+import '../widgets/theme_settings.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({
-    super.key,
-    required this.themeMode,
-    required this.onThemeChanged,
-  });
-
-  final ThemeMode themeMode;
-  final ValueChanged<ThemeMode> onThemeChanged;
+  const AppShell({super.key});
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -21,8 +16,9 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   late List<ExchangeSession> _sessions;
-  final Profile _profile = const Profile.empty();
+  Profile _profile = const Profile.empty();
   int _selectedTab = 0;
+  int _resetVersion = 0;
 
   @override
   void initState() {
@@ -36,6 +32,12 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+  void _saveProfile(Profile profile) {
+    setState(() {
+      _profile = profile;
+    });
+  }
+
   void _toggleFavourite(ExchangeSession selected) {
     final updated = [
       for (final session in _sessions)
@@ -44,7 +46,6 @@ class _AppShellState extends State<AppShell> {
         else
           session,
     ];
-
     setState(() {
       _sessions = updated;
     });
@@ -58,16 +59,89 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  void _showAbout() {
+    Navigator.pop(context);
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('About Language Exchange'),
+        content: const Text(
+          'Find language practice meetings, save favourites and join '
+          'other learners. All data stays in memory for this lab.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _resetData() async {
+    Navigator.pop(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reset data?'),
+        content: const Text(
+          'Restore the twelve seed sessions and clear your profile?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) {
+      return;
+    }
+
+    final restored = createSeedSessions();
+    setState(() {
+      _sessions = restored;
+      _profile = const Profile.empty();
+      _resetVersion++;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Data reset')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final membershipCount = _profile.name.trim().isEmpty
-        ? 0
-        : _sessions.where((session) => session.contains(_profile.name)).length;
-    final textTheme = Theme.of(context).textTheme;
+    final themeSettings = ThemeSettings.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Language Exchange'),
+      appBar: AppBar(title: const Text('Language Exchange')),
+      drawer: Drawer(
+        child: SafeArea(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              const DrawerHeader(
+                child: Text('Language Exchange'),
+              ),
+              ListTile(
+                title: const Text('About'),
+                trailing: const Icon(Icons.info_outline),
+                onTap: _showAbout,
+              ),
+              ListTile(
+                title: const Text('Reset data'),
+                trailing: const Icon(Icons.restart_alt),
+                onTap: _resetData,
+              ),
+            ],
+          ),
+        ),
       ),
       body: IndexedStack(
         index: _selectedTab,
@@ -83,28 +157,13 @@ class _AppShellState extends State<AppShell> {
             onOpen: _openSession,
             onFavourite: _toggleFavourite,
           ),
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.person_outline, size: 48),
-                  const SizedBox(height: 12),
-                  Text(
-                    _profile.name.isEmpty ? 'Your profile' : _profile.name,
-                    style: textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _profile.group.isEmpty ? 'No group saved' : _profile.group,
-                  ),
-                  Text('You are on $membershipCount lists'),
-                  const SizedBox(height: 12),
-                  const Text('Profile editing will be added next.'),
-                ],
-              ),
-            ),
+          ProfileTab(
+            key: ValueKey(_resetVersion),
+            profile: _profile,
+            sessions: _sessions,
+            onSave: _saveProfile,
+            themeMode: themeSettings.mode,
+            onThemeChanged: themeSettings.onChanged,
           ),
         ],
       ),
