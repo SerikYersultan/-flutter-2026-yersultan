@@ -20,6 +20,7 @@ class _AppShellState extends State<AppShell> {
   Profile _profile = const Profile.empty();
   int _selectedTab = 0;
   int _resetVersion = 0;
+  bool _openingForm = false;
 
   @override
   void initState() {
@@ -56,6 +57,40 @@ class _AppShellState extends State<AppShell> {
         return;
       }
     }
+  }
+
+  Future<void> _createSession() async {
+    if (_openingForm) {
+      return;
+    }
+    setState(() {
+      _openingForm = true;
+    });
+
+    final created = await Navigator.pushNamed<ExchangeSession>(
+      context,
+      Routes.form,
+      arguments: const FormArguments(),
+    );
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _openingForm = false;
+    });
+    if (created == null) {
+      return;
+    }
+
+    final updated = [..._sessions, created];
+    setState(() {
+      _sessions = updated;
+      _selectedTab = 0;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Session created')),
+    );
   }
 
   void _requestProfile() {
@@ -183,6 +218,14 @@ class _AppShellState extends State<AppShell> {
           ),
         ],
       ),
+      floatingActionButton: _selectedTab == 2
+          ? null
+          : FloatingActionButton(
+              key: const ValueKey('create-session'),
+              tooltip: 'New session',
+              onPressed: _openingForm ? null : _createSession,
+              child: const Icon(Icons.add),
+            ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedTab,
         onDestinationSelected: _selectTab,
