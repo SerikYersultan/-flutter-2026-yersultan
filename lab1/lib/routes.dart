@@ -6,6 +6,7 @@ import 'models/profile.dart';
 abstract final class Routes {
   static const shell = '/';
   static const detail = '/detail';
+  static const form = '/form';
 }
 
 class DetailArguments {
@@ -20,4 +21,10 @@ class DetailArguments {
   final Profile profile;
   final ValueChanged<ExchangeSession> onChanged;
   final VoidCallback onRequestProfile;
+}
+
+class FormArguments {
+  const FormArguments({this.session});
+
+  final ExchangeSession? session;
 }
