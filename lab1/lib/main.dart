@@ -1,60 +1,56 @@
 import 'package:flutter/material.dart';
 
+import 'routes.dart';
+import 'screens/app_shell.dart';
+
 void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      title: 'Language Exchange',
-      debugShowCheckedModeBanner: false,
-      home: WelcomeScreen(),
-    );
-  }
+  State<MyApp> createState() => _MyAppState();
 }
 
-class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({super.key});
+class _MyAppState extends State<MyApp> {
+  ThemeMode _themeMode = ThemeMode.system;
+
+  void _changeTheme(ThemeMode mode) {
+    setState(() {
+      _themeMode = mode;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final seed = const ColorScheme.light().primary;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Language Exchange'),
+    return MaterialApp(
+      title: 'Language Exchange',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: seed),
       ),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.forum_outlined,
-                  size: 64,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Meet. Speak. Connect.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Conversation sessions for the KBTU community.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyLarge,
-                ),
-              ],
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: seed,
+          brightness: Brightness.dark,
+        ),
+      ),
+      themeMode: _themeMode,
+      initialRoute: Routes.shell,
+      routes: {
+        Routes.shell: (context) => AppShell(
+              themeMode: _themeMode,
+              onThemeChanged: _changeTheme,
             ),
-          ),
+      },
+      onUnknownRoute: (settings) => MaterialPageRoute<void>(
+        settings: settings,
+        builder: (context) => const Scaffold(
+          body: Center(child: Text('Not found')),
         ),
       ),
     );
