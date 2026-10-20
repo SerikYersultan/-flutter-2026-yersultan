@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/seed_sessions.dart';
 import '../models/exchange_session.dart';
 import '../models/profile.dart';
+import '../routes.dart';
 import '../tabs/profile_tab.dart';
 import '../tabs/sessions_tab.dart';
 import '../widgets/theme_settings.dart';
@@ -38,23 +39,38 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
-  void _toggleFavourite(ExchangeSession selected) {
+  void _replaceSession(ExchangeSession updatedSession) {
     final updated = [
       for (final session in _sessions)
-        if (session.id == selected.id)
-          session.copyWith(favourite: !session.favourite)
-        else
-          session,
+        if (session.id == updatedSession.id) updatedSession else session,
     ];
     setState(() {
       _sessions = updated;
     });
   }
 
+  void _toggleFavourite(ExchangeSession selected) {
+    for (final session in _sessions) {
+      if (session.id == selected.id) {
+        _replaceSession(session.copyWith(favourite: !session.favourite));
+        return;
+      }
+    }
+  }
+
+  void _requestProfile() {
+    _selectTab(2);
+  }
+
   void _openSession(ExchangeSession session) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('The detail screen will be added in the next stage.'),
+    Navigator.pushNamed<void>(
+      context,
+      Routes.detail,
+      arguments: DetailArguments(
+        session: session,
+        profile: _profile,
+        onChanged: _replaceSession,
+        onRequestProfile: _requestProfile,
       ),
     );
   }

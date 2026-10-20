@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'routes.dart';
 import 'screens/app_shell.dart';
+import 'screens/session_detail_screen.dart';
 import 'widgets/theme_settings.dart';
 
 void main() {
@@ -22,6 +23,19 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       _themeMode = mode;
     });
+  }
+
+  Route<dynamic>? _generateRoute(RouteSettings settings) {
+    if (settings.name == Routes.detail) {
+      final arguments = settings.arguments;
+      if (arguments is DetailArguments) {
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (context) => SessionDetailScreen(arguments: arguments),
+        );
+      }
+    }
+    return null;
   }
 
   @override
@@ -48,6 +62,7 @@ class _MyAppState extends State<MyApp> {
         routes: {
           Routes.shell: (context) => const AppShell(),
         },
+        onGenerateRoute: _generateRoute,
         onUnknownRoute: (settings) => MaterialPageRoute<void>(
           settings: settings,
           builder: (context) => const Scaffold(
