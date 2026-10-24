@@ -1,0 +1,156 @@
+import 'package:flutter/material.dart';
+
+void main() => runApp(const MyApp());
+
+const groups = ['IT-2301', 'IT-2302', 'IT-2303', 'IT-2304', 'IT-2305'];
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal)),
+    home: const SignUpScreen(),
+  );
+}
+
+class SignUpScreen extends StatefulWidget {
+  const SignUpScreen({super.key});
+
+  @override
+  State<SignUpScreen> createState() => _SignUpScreenState();
+}
+
+class _SignUpScreenState extends State<SignUpScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
+  final _emailFocusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmController.dispose();
+    _emailFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _unfocus() {
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  String? _validateName(String? value) {
+    if ((value ?? '').trim().length < 2) {
+      return 'Name must contain at least 2 characters';
+    }
+    return null;
+  }
+
+  String? _validateEmail(String? value) {
+    final email = (value ?? '').trim();
+    final atIndex = email.indexOf('@');
+
+    if (atIndex < 0 || email.indexOf('.', atIndex + 1) < 0) {
+      return 'Enter an email with @ and a dot after it';
+    }
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    if ((value ?? '').length < 8) {
+      return 'Password must contain at least 8 characters';
+    }
+    return null;
+  }
+
+  String? _validateConfirm(String? value) {
+    if ((value ?? '') != _passwordController.text) {
+      return 'Passwords do not match';
+    }
+    return null;
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    _unfocus();
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('Account created')));
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Sign up')),
+    body: SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextFormField(
+              controller: _nameController,
+              validator: _validateName,
+              textInputAction: TextInputAction.next,
+              onFieldSubmitted: (_) => _emailFocusNode.requestFocus(),
+              onTapOutside: (_) => _unfocus(),
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _emailController,
+              focusNode: _emailFocusNode,
+              validator: _validateEmail,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              textInputAction: TextInputAction.next,
+              onTapOutside: (_) => _unfocus(),
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                hintText: 'name@kbtu.kz',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _passwordController,
+              validator: _validatePassword,
+              obscureText: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              textInputAction: TextInputAction.next,
+              onTapOutside: (_) => _unfocus(),
+              decoration: InputDecoration(
+                labelText: 'Password',
+                helperText: 'At least 8 characters',
+                counterText: '${_passwordController.text.length} of 8',
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _confirmController,
+              validator: _validateConfirm,
+              obscureText: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _submit(),
+              onTapOutside: (_) => _unfocus(),
+              decoration: const InputDecoration(labelText: 'Confirm password'),
+            ),
+            const SizedBox(height: 24),
+            FilledButton(onPressed: _submit, child: const Text('Sign up')),
+          ],
+        ),
+      ),
+    ),
+  );
+}
