@@ -1,0 +1,9 @@
+# Experiments: intentionally broken flows and their real errors
+
+1. Level 2 — AppBar with leading: const BackButton(). Я временно добавил `leading: const BackButton()` в `StudentsScreen`, затем запустил виджет-тест на списке. В реальном поведении на первом экране появилась стрелка назад, а навигационный стек уже не соответствовал требованию «на главном экране нет стрелки назад». Это нарушало условие задания, поэтому строка была немедленно удалена. Ошибка/поведение: BackButton появился на экране без стека, а логика списка перестала быть чистой стартовой сценой.
+
+2. Level 3 — guard removed for null-check bug. Я временно изменил guard в `_DetailScreenState._edit()` на `setState(() => _student = _student.copyWith(name: name!));`, после чего запустил тест edit flow. Flutter записал реальную ошибку: `Null check operator used on a null value`. Это подтверждает, что возвращение из `EditScreen` должно быть защищено через `if (name == null || !mounted) return;` — именно так и было восстановлено.
+
+3. Level 4a — wrong route name. Я временно заменил `Navigator.of(context).pushNamed(Routes.student, arguments: student);` на `Navigator.of(context).pushNamed('/studnet', arguments: student);` и запустил навигационный тест. В реальном приложении Flutter выбрасывает: `Could not find a generator for route`. Это значит, что маршрут должен быть зарегистрирован в `routes`/`onGenerateRoute` и именован только через `Routes.student`, после чего код был возвращён в исходное состояние.
+
+4. Level 4b — typo in route constant. Я временно попытался вызвать `pushNamed(Routes.studnet, arguments: student);` после того, как допустил опечатку в имени константы. При проверке через `flutter analyze` компилятор сообщил: `The getter 'studnet' isn't defined for the type 'Routes'.` Это доказывает, что все имена маршрутов должны быть взяты только из `Routes`, а затем код возвратился к правильному имени `student`.
